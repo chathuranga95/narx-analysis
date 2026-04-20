@@ -34,6 +34,19 @@ Artifacts are written to `artifacts/`:
 - `metrics.json`
 - `test_predictions.png` (unless `--no-plot`)
 
+### Forecast
+
+After training, you can forecast future arrivals by rolling the model forward:
+
+```bash
+python forecast_narx.py --horizon 6
+```
+
+Notes:
+
+- Forecasting requires future exogenous inputs. Since `dataset.csv` doesn’t include `AVGgoogle_trend` values beyond the last month, `forecast_narx.py` currently uses **the last observed `AVGgoogle_trend` value** for all forecasted months.
+- The output is a table of future `Month` values and `Indian_Arrivals_forecast`.
+
 ### Common tweaks
 
 ```bash
