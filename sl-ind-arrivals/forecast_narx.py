@@ -1,7 +1,7 @@
 import argparse
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 import joblib
 import numpy as np
@@ -58,6 +58,43 @@ def month_add(start: pd.Timestamp, k: int) -> pd.Timestamp:
     # Monthly frequency add (keeps day=1 if present)
     return (start.to_period("M") + k).to_timestamp()
 
+def _parse_u_values(u_values: Optional[str], n_exog: int, horizon: int) -> Optional[np.ndarray]:
+    """
+    Parse a user-provided exogenous sequence for the forecast horizon.
+
+    Supported forms:
+    - "42" => constant value repeated for all months
+    - "40,41,42" => per-month values (length must equal horizon)
+
+    For multi-exog models, provide values per month separated by commas, with each month
+    containing slash-separated values, e.g. "10/20,11/21" for horizon=2 and n_exog=2.
+    """
+    if u_values is None:
+        return None
+
+    u_values = u_values.strip()
+    if not u_values:
+        return None
+
+    if "," not in u_values and "/" not in u_values:
+        val = float(u_values)
+        return np.tile(np.array([val] * n_exog, dtype=np.float32), (horizon, 1))
+
+    months = [m.strip() for m in u_values.split(",") if m.strip()]
+    if len(months) != horizon:
+        raise ValueError(f"--u-values must provide exactly {horizon} month(s); got {len(months)}")
+
+    rows = []
+    for m in months:
+        if n_exog == 1:
+            rows.append([float(m)])
+        else:
+            parts = [p.strip() for p in m.split("/") if p.strip()]
+            if len(parts) != n_exog:
+                raise ValueError(f"Each month must provide {n_exog} exog value(s) separated by '/': got '{m}'")
+            rows.append([float(p) for p in parts])
+    return np.array(rows, dtype=np.float32)
+
 
 def main() -> None:
     p = argparse.ArgumentParser(description="Forecast future months with trained NARX artifacts")
@@ -69,8 +106,19 @@ def main() -> None:
         "--u-future",
         type=str,
         default="last",
-        choices=["last"],
-        help="strategy for future exogenous values (only 'last' supported)",
+        choices=["last", "values"],
+        help="strategy for future exogenous values: 'last' or 'values'",
+    )
+    p.add_argument(
+        "--u-values",
+        type=str,
+        default=None,
+        help=(
+            "Future exogenous values for the forecast horizon. "
+            "For 1 exog: provide a constant ('42') or a comma list ('40,41,42'). "
+            "For multiple exog: provide per-month slash-separated values ('10/20,11/21'). "
+            "Used only when --u-future values."
+        ),
     )
     args = p.parse_args()
 
@@ -97,10 +145,16 @@ def main() -> None:
     y_window = list(y_hist[-bundle.n_y :].tolist())
     u_window = u_hist[-bundle.n_u :].copy()  # (n_u, n_exog)
 
+    u_values = _parse_u_values(args.u_values, n_exog=u_hist.shape[1], horizon=args.horizon)
+    if args.u_future == "values" and u_values is None:
+        raise ValueError("--u-future values requires --u-values")
+
     preds = []
     for step in range(1, args.horizon + 1):
         if args.u_future == "last":
             u_next = last_u
+        elif args.u_future == "values":
+            u_next = u_values[step - 1]
         else:
             raise ValueError("Unsupported u-future strategy")
 

@@ -44,7 +44,18 @@ python forecast_narx.py --horizon 6
 
 Notes:
 
-- Forecasting requires future exogenous inputs. Since `dataset.csv` doesn’t include `AVGgoogle_trend` values beyond the last month, `forecast_narx.py` currently uses **the last observed `AVGgoogle_trend` value** for all forecasted months.
+- Forecasting requires future exogenous inputs.
+- By default, since `dataset.csv` doesn’t include `AVGgoogle_trend` values beyond the last month, `forecast_narx.py` uses **the last observed `AVGgoogle_trend` value** for all forecasted months.
+- To provide your own average Google Trend values for the forecast horizon:
+
+```bash
+# constant value used for all forecast months
+python forecast_narx.py --horizon 6 --u-future values --u-values 40
+
+# month-by-month values (must match --horizon)
+python forecast_narx.py --horizon 6 --u-future values --u-values "40,42,39,41,45,43"
+```
+
 - The output is a table of future `Month` values and `Indian_Arrivals_forecast`.
 
 ### Common tweaks
